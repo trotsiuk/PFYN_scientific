@@ -1,0 +1,346 @@
+---
+title: "Pfynwald VPD manipulation"
+subtitle: "Atmosphere part"
+author: "[Schaub M](mailto:marcus.schaub@wsl.ch)., Gissler J., Trotsiuk V., ...."
+date: today
+date-format: "YYYY-MM-DD"
+description: "This report was automaticaly generated. For real-time data please follow the link below. For more questions please contact the authors of the report."
+title-block-banner: "white"
+format: 
+  html:
+    embed-resources: true
+    smooth-scroll: true
+    theme: cosmo
+    fontcolor: black
+    toc: true
+    toc-location: left
+    toc-title: Menu
+    toc-depth: 3
+    fig-width: 10
+    fig-height: 7
+css: styles.css
+editor: visual
+---
+
+```{r settings}
+#| eval: TRUE
+#| echo: FALSE
+#| output: TRUE
+#| warning: FALSE
+#| error: FALSE
+
+names_treatment <- c('control' = 'Control', 'irrigation' = "Irrigation", 'roof' = 'Drought', 'irrigation_vpd' = 'Irrigation VPD', 'roof_vpd' = 'Roof VPD')
+
+messvarid_vpd <- c(5555, 5786, 5970, 6144, 6312, 6480, 6672, 6886, 7100, 7314, 7528, 7724, 7904, 8084, 8714)
+messvarid_at <- c(5553, 5784, 5968, 6142, 6310, 6478, 6670, 6884, 7098, 7312, 7526, 7722, 7902, 8082, 8712)
+messvarid_rh <- c(5554, 5785, 5969, 6143, 6311, 6479, 6671, 6885, 7099, 7313, 7527, 7723, 7903, 8083, 8713)
+
+messvarid_dendr <- c(5428, 5429, 5430, 5657, 5658, 5659, 5841, 5842, 5843, 6017, 6018, 6019, 6185, 6186, 6187, 6353, 6354, 6355, 6545, 6546, 6547, 6759, 6760, 6761, 6973, 6974, 6975, 7187, 7188, 7189, 7401, 7402, 7403, 7597, 7598, 7599, 7777, 7778, 7779, 7957, 7958, 7959, 8585, 8586, 8587)
+
+messvarid_smp <- c(5443, 5445, 5447, 5449, 5672, 5674, 5676, 5678, 5680, 5856, 5858, 5860, 5862, 5864, 6032, 6034, 6036, 6038, 6200, 6202, 6204, 6206, 6368, 6370, 6372, 6374, 6560, 6562, 6564, 6566, 6774, 6776, 6778, 6780, 6988, 6990, 6992, 6994, 7202, 7204, 7206, 7208, 7416, 7418, 7420, 7422, 7612, 7614, 7616, 7618, 7792, 7794, 7796, 7798, 7972, 7974, 7976, 7978, 8600, 8602, 8604, 8606, 8608) 
+
+messvar_id_prec <- 134
+messvar_id_rad <- 132
+
+time_last_day <- Sys.Date() - 1
+time_from_hist <- as.Date( '2022-01-01')
+time_from_vpd <- as.Date( '2024-01-01')
+time_year <- lubridate::year( time_last_day )
+
+```
+
+```{r libraries}
+#| eval: TRUE
+#| echo: FALSE
+#| output: TRUE
+#| warning: FALSE
+#| error: FALSE
+
+library(rADATA)
+library(ggplot2)
+
+conn_pg <- dbConnect_lwf( username = 'lwf_pfyn_vis', 
+                          password = config::get( config='lwf_pfyn_vis', file = 'config.yml')$password,
+                          db_host = 'pgdboapp',
+                          db_name = 'lwf')
+
+pfyn_style <- list(
+  ggplot2::theme_bw(),
+  ggplot2::theme(
+      legend.position = "bottom",
+      legend.text.align = 0,
+      legend.background = ggplot2::element_blank(),
+      legend.title = ggplot2::element_blank(),
+      legend.key = ggplot2::element_blank(),
+      legend.text = ggplot2::element_text(size=14, color="#222222"),
+      axis.title = ggplot2::element_text( size=14, color="#222222"),
+      axis.text = ggplot2::element_text( size=14, color="#222222"),
+      strip.text = ggplot2::element_text( size=14, color="#222222"),
+      # axis.text.x = ggplot2::element_text(margin=ggplot2::margin(5, b = 10)),
+      # axis.ticks = ggplot2::element_blank(),
+      strip.background =  ggplot2::element_blank(),
+      axis.line = ggplot2::element_blank(),
+      panel.grid.minor = ggplot2::element_blank(),
+      panel.grid.major = ggplot2::element_blank(),
+      panel.background = ggplot2::element_blank()
+    ) ,
+  scale_color_manual('', values = c(`Control` = '#F5EE47', 
+                                      `VPD manipulation` = '#3C478E',
+                                      `Irrigation` = '#4EA8B3',
+                                      `Drought` = '#D00202',
+                                      `Irrigation VPD` = '#3C478E',
+                                      `Roof VPD` = '#4EA802',
+                                    Historical = 'grey80',
+                                    `Current year` = '#D00202')),
+    scale_fill_manual('', values = c(`Control` = '#F5EE47', 
+                                     `VPD manipulation` = '#3C478E',
+                                     `VPD manipulation` = '#3C478E',
+                                      `Irrigation` = '#4EA8B3',
+                                      `Drought` = '#D00202',
+                                      `Irrigation VPD` = '#3C478E',
+                                      `Roof VPD` = '#4EA802',
+                                    Historical = 'grey80',
+                                    `Current year` = '#D00202'))
+
+)
+```
+
+```{r data}
+#| eval: TRUE
+#| echo: FALSE
+#| output: TRUE
+#| warning: FALSE
+#| error: FALSE
+
+# Get the daily data ------------------------------------------------------
+
+messvar_info.df <- tbl_lwf( conn_pg, 'adata', "V_MESSVAR") %>%
+  dplyr::filter( MESSVAR_ID %in% c( messvar_id_prec, messvar_id_rad, messvarid_at, messvarid_rh, messvarid_vpd, messvarid_dendr, messvarid_smp)) %>%
+  dplyr::distinct( VARNAME_NAME, TREATMENT, MESSVAR_ID) %>%
+  dplyr::collect()
+
+data_day.df <- tbl_lwf( conn_pg, 'adata', "PFYN_MESSDAT") %>%
+  dplyr::filter( MESSVAR_ID %in% c( messvar_id_prec, messvar_id_rad, messvarid_at, messvarid_rh, messvarid_vpd, messvarid_dendr, messvarid_smp),
+                 MESSTIME >= time_from_hist) %>%
+  dplyr::mutate( MESSTIME = DATE(MESSTIME)) %>%
+  dplyr::group_by( MESSVAR_ID, MESSTIME ) %>%
+  dplyr::summarise( MESSVAL_min = min(MESSVAL, na.rm = TRUE),
+                    MESSVAL_max = max(MESSVAL, na.rm = TRUE),
+                    MESSVAL_mean = mean(MESSVAL, na.rm = TRUE),
+                    MESSVAL_sum = sum(MESSVAL, na.rm = TRUE),
+                    .groups = 'drop') %>%
+  dplyr::collect() %>%
+  dplyr::inner_join( messvar_info.df, by = 'MESSVAR_ID')%>%
+  ## Additional calculations and summaries
+  dplyr::arrange( MESSVAR_ID, MESSTIME) %>%
+  dplyr::group_by( MESSVAR_ID, YEAR = lubridate::year(MESSTIME) ) %>%
+  dplyr::mutate( DOY = lubridate::yday(MESSTIME),
+                 MESSVAL_sum_cum = cumsum( MESSVAL_sum),
+                 MESSVAL_max_max = cummax( MESSVAL_max)) %>%
+  dplyr::group_by( TREATMENT, VARNAME_NAME, YEAR, DOY, MESSTIME) %>%
+  dplyr::summarise( dplyr::across( dplyr::starts_with("MESSVAL"), mean), .groups = 'drop') %>%
+  dplyr::mutate( TREATMENT = names_treatment[TREATMENT])
+
+# save( data_day.df, file = 'data.Rdata')
+
+dbDisconnect( conn_pg )
+```
+
+```{r summary}
+#| eval: TRUE
+#| echo: FALSE
+#| output: TRUE
+#| warning: FALSE
+#| error: FALSE
+
+# load( 'data.Rdata' )
+
+# Current and historical ranges -------------------------------------------
+data_year.df <- data_day.df %>%
+  dplyr::group_by( TREATMENT, VARNAME_NAME, CURRENT_YEAR = YEAR %in% time_year, DOY) %>%
+  dplyr::summarise( MESSVAL_mean = mean(MESSVAL_sum_cum, na.rm = TRUE),
+                    MESSVAL_sd = sd(MESSVAL_sum_cum, na.rm = TRUE),
+                    .groups = 'drop') %>%
+  dplyr::mutate( CURRENT_YEAR = dplyr::if_else(CURRENT_YEAR, 'Current year', 'Historical'),
+                 MESSVAL_sd = dplyr::if_else(is.na(MESSVAL_sd), 0, MESSVAL_sd))
+
+
+
+
+# Text summary ------------------------------------------------------------
+# current year
+summ_curr_year.df <- data_year.df %>%
+  dplyr::filter( VARNAME_NAME %in% c('Atmospheric precipitation', 'Radiation shortwave incoming')) %>%
+  dplyr::group_by( CURRENT_YEAR) %>%
+  dplyr::filter( DOY %in% max(DOY)) %>%
+  dplyr::select( VARNAME_NAME,CURRENT_YEAR, MESSVAL_mean) %>%
+  tidyr::pivot_wider(names_from = CURRENT_YEAR, values_from = MESSVAL_mean) %>%
+  dplyr::mutate( cum_perc = 100 * `Current year` / Historical,
+                 dplyr::across(c(Historical, `Current year`, cum_perc), round))
+
+text_prec <- dplyr::filter( summ_curr_year.df, VARNAME_NAME %in% 'Atmospheric precipitation') %>% as.vector()
+text_prec_max <- dplyr::filter( data_day.df, VARNAME_NAME %in% 'Atmospheric precipitation') %>% dplyr::filter(MESSVAL_sum_cum %in% max(MESSVAL_sum_cum)) %>% dplyr::filter( DOY %in% max(DOY))
+
+# VPD summary -------------------------------------------------------------
+text_vpd <- data_day.df %>%
+  dplyr::filter( VARNAME_NAME %in% c('Atmospheric vapour pressure deficit', 'Air temperature'), TREATMENT %in% c('Drought', 'Irrigation')) %>%
+  dplyr::select( VARNAME_NAME, MESSTIME, TREATMENT, MESSVAL_max) %>%
+  tidyr::pivot_wider(names_from = TREATMENT, values_from = MESSVAL_max) %>%
+  dplyr::mutate( diff = Drought - Irrigation) %>%
+  dplyr::group_by( VARNAME_NAME) %>%
+  dplyr::filter( MESSTIME %in% time_last_day | abs(diff) %in% max(abs(diff))) %>%
+  dplyr::mutate( diff = round(diff, 2))
+
+text_vpd_last <- dplyr::filter( text_vpd, MESSTIME %in% time_last_day) %>% dplyr::select( VARNAME_NAME, diff) %>% tibble::deframe()
+text_at_max <- dplyr::group_by( text_vpd, VARNAME_NAME) %>% dplyr::filter( diff %in% max(diff)) %>% dplyr::filter( VARNAME_NAME %in% 'Air temperature' )
+
+
+```
+
+## Introcuction
+
+In the heart of the Pfynwald forest, our experiment stands at the intersection of climate change research and forest ecology, with a particular focus on impact of VPD on tree growth and mortality. In this report we present the latest scientific summary of main measured parameters in the experiment. Please visit [**Real-Time data** ](https://lwfvis.wsl.ch:3000/public-dashboards/31262a55a9f641a0b65224baebabfcc0) for more information and in-depth exploration of historical and recent data.
+
+## Atmospheric precipitation and Solar radiation
+
+Atmospheric precipitation and Solar radiation play a pivotal role in driving tree vitality and growth through the VPD (Vapor pressure deficit) and soil water availability. Understanding where the current year stands in relation to previous year help to make the early warning and alerting. This year, the sum of precipitation recorded thus far is **`r text_prec[['Current year']]`** mm, which represents approximately **`r text_prec$cum_perc` %** of the average total annual precipitation observed over the past years (**`r text_prec$Historical`** mm), highlighting the variability and potential shifts in climate patterns affecting our study site. The peak precipitation year within our dataset occurred in **`r text_prec_max$YEAR`**, with a total of **`r round( text_prec_max$MESSVAL_sum_cum, 0)`** mm, underscoring the fluctuating nature of these environmental variables.
+
+```{r }
+#| eval: true
+#| echo: false
+#| output: true
+#| warning: false
+#| error: false
+#| fig-width: 10
+#| fig-height: 12
+
+#' Visualise the data into the figure
+
+data_year.df %>%
+  dplyr::filter(VARNAME_NAME %in% c('Atmospheric precipitation', 'Radiation shortwave incoming')) %>%
+  ggplot( aes(x = as.Date("2020-12-31") + DOY, MESSVAL_mean, color = CURRENT_YEAR, fill = CURRENT_YEAR)) +
+  geom_ribbon(aes(ymin = MESSVAL_mean - MESSVAL_sd,  ymax= MESSVAL_mean + MESSVAL_sd), alpha = .2) +
+  geom_line() +
+  pfyn_style +
+  facet_wrap(~VARNAME_NAME, ncol = 1, scales = 'free') +
+  labs( x = 'Day of the year', y = '') +
+  scale_x_date(date_breaks = "1 month", date_labels = "%b")
+
+```
+
+## Air temperature and VPD
+
+Within the scope of our research in the Pfynwald forest, air temperature and Vapor Pressure Deficit (VPD) are of paramount importance, serving as key indicators of atmospheric conditions that significantly impact plant transpiration and ecosystem health. This year, we've observed an average air temperature of XXX°C, which aligns with \[an increasing/decreasing\] trend in temperature variations, indicative of broader climatic shifts. Concurrently, the VPD has been measured at XXX kPa on average, illustrating \[an increase/decrease\] compared to historical data. These metrics are crucial for understanding the physiological stress on trees and the overall functionality of the forest ecosystem in response to changing environmental conditions. The interplay between air temperature and VPD highlights the intricate balance of moisture in the atmosphere and soil, directly influencing the forest's resilience to climate change.
+
+We see that the last measured daily maximum of Air temperature differ by **`r text_vpd_last['Air temperature']`** C and VPD by **`r text_vpd_last['Atmospheric vapour pressure deficit']`** kPa between Drought and Irrigation plots. The maximum difference in Air temperature between Drought and Irrigated plot was **`r text_at_max[['diff']]`** C in **`r text_at_max[['MESSTIME']]`**.
+
+```{r}
+#| eval: true
+#| echo: false
+#| output: true
+#| warning: false
+#| error: false
+#| fig-cap: "Historical (shaded grey) and Current (solid) measured daily maximum values of VPD in relation to Air relative humidity and Air temperature"
+
+data_vpd <- dplyr::bind_rows(
+  dplyr::filter(data_day.df, VARNAME_NAME %in% c('Air temperature') ) %>% dplyr::select( TREATMENT, VARNAME_NAME, YEAR, DOY, MESSTIME, X_VALUE = MESSVAL_max),
+  dplyr::filter(data_day.df, VARNAME_NAME %in% c('Air relative humidity') ) %>% dplyr::select( TREATMENT, VARNAME_NAME, YEAR, DOY, MESSTIME, X_VALUE = MESSVAL_min)
+) %>%
+  dplyr::inner_join(
+    dplyr::filter(data_day.df, VARNAME_NAME %in% c('Atmospheric vapour pressure deficit') ) %>% dplyr::select( TREATMENT, YEAR, DOY, Y_VALUE = MESSVAL_max),
+    by = c('TREATMENT', 'YEAR', 'DOY')
+  )
+  
+data_vpd %>%
+  ggplot( aes( X_VALUE, Y_VALUE, color = TREATMENT))+
+  geom_point(  size = 3, color = 'grey', alpha = .2) +
+  geom_point( data = dplyr::filter(data_vpd, MESSTIME %in% time_last_day), size = 5) +
+  pfyn_style +
+  facet_wrap(~VARNAME_NAME, nrow = 1, scales = 'free') +
+  labs( x = '', y = 'VPD max (kPa)')
+
+```
+
+
+```{r}
+#| eval: true
+#| echo: false
+#| output: true
+#| warning: false
+#| error: false
+#| fig-cap: "Historical (shaded grey) and Current (solid) measured daily VPD values in relation to Soil water matric potential."
+
+data_vpd <- dplyr::filter(data_day.df, VARNAME_NAME %in% c('Soil water matric potential') ) %>% dplyr::select( TREATMENT, VARNAME_NAME, YEAR, DOY, MESSTIME, X_VALUE = MESSVAL_min) %>%
+  dplyr::inner_join(
+    dplyr::filter(data_day.df, VARNAME_NAME %in% c('Atmospheric vapour pressure deficit') ) %>% dplyr::select( TREATMENT, YEAR, DOY, Y_VALUE = MESSVAL_max),
+    by = c('TREATMENT', 'YEAR', 'DOY')
+  )
+  
+data_vpd %>%
+  ggplot( aes( X_VALUE, Y_VALUE, color = TREATMENT))+
+  geom_point(  size = 3, color = 'grey', alpha = .2) +
+  geom_point( data = dplyr::filter(data_vpd, MESSTIME %in% time_last_day), size = 5) +
+  pfyn_style +
+  labs( x = 'Soil water matric potential (kPa)', y = 'VPD max (kPa)')
+
+```
+
+## Tree growth and Sap flow
+
+Tree growth and sap flow are integral components of our research, offering profound insights into the vitality and response of the forest ecosystem to environmental stressors. The measurement of dendrometer growth allows us to quantify the subtle yet significant changes in tree girth, reflecting the cumulative impact of climatic variables on tree development over time. This year, we've recorded an average growth rate of XXX mm, which, when compared to historical data, suggests \[an acceleration/a deceleration\] in tree growth patterns, likely influenced by prevailing environmental conditions. Simultaneously, sap flow measurements provide a dynamic view of the trees' water transport mechanisms, essential for understanding their adaptation to varying levels of soil moisture and atmospheric demand. With an average sap flow rate of XXX liters per day, our findings indicate \[an increase/a decrease\] in water uptake and utilization, underscoring the trees' resilience or vulnerability to the observed shifts in climate. Together, these metrics paint a comprehensive picture of forest health and its ongoing adaptation to a changing world.
+
+```{r}
+#| eval: true
+#| echo: false
+#| output: true
+#| warning: false
+#| error: false
+#| fig-cap: "Dendrometer signal. This is the wrong figure, need to be corrected"
+
+data_day.df %>%
+  dplyr::filter( VARNAME_NAME %in% 'Stem dendrometer signal, point automatic') %>%
+  ggplot( aes( MESSTIME, MESSVAL_max, color = TREATMENT))+
+  geom_line() +
+  pfyn_style +
+  labs( x = 'Callendar year', y = 'Tree growth') +
+  scale_x_date(date_breaks = "1 month", date_labels = "%Y-%b")
+
+```
+
+## Summary
+
+The Pfynald experiment, set against the backdrop of the verdant Pfynwald forest, serves as a pioneering research endeavor aimed at unraveling the complex interactions between forest ecosystems and the changing climate. Central to this study are the meticulous observations and analyses of solar radiation, precipitation, air temperature, vapor pressure deficit (VPD), tree growth, and sap flow—each a critical piece in the puzzle of ecological response to environmental stressors.
+
+This year, our research has unveiled notable trends: precipitation levels have fallen to just XX% of the historical average, signaling a marked deviation that may influence forest hydrology and plant water availability. Conversely, solar radiation has reached XXX MJ/m², potentially exacerbating the effects of decreased moisture through increased evapotranspiration demand.
+
+Air temperature and VPD measurements further highlight the changing climatic conditions, with an average air temperature of XXX°C and a VPD of XXX kPa, reflecting the heightened atmospheric demand for moisture that can stress plant physiological processes.
+
+In the face of these environmental challenges, the forest's resilience is evident in the adaptive responses of tree growth and sap flow. Average dendrometer growth rates of XXX mm and sap flow rates of XXX liters per day provide critical insights into the trees' coping mechanisms under variable water availability and atmospheric conditions.
+
+Through the integration of these diverse but interconnected datasets, the Pfynald experiment offers invaluable empirical evidence on the effects of climate change on temperate forests. It underscores the importance of continued monitoring and research to predict and mitigate the impacts of environmental stressors on forest ecosystems, thereby contributing to the broader understanding of climate change dynamics and ecological sustainability.
+
+## Further information
+
+### Project lead
+
+Marcus Schaub
+
+### Deputy
+
+Charlotte Grossiord, Jonas Gisler
+
+### Project staff
+
+Petra D'Odorico, Arthur Gessler, Jonas Gisler, Charlotte Grossiord, Christian Hug, Stefan Hunziker, Katrin di Bella Meusburger, Richard Peters, Andreas Rigling, Volodymyr Trotsiuk, Roman Zweifel
+
+### Cooperation
+
+Kanton Wallis Gemeinde Leuk Forst Region Leuk Regionaler Naturpark Pfyn-Finges FMV Force Motrice Valaisanne Schweizerischer Nationalfonds SNF SwissForestLab ETH Zürich Universität Basel École polytechnique fédérale de Lausanne EPFL
+
+### Financing
+
+Schweizerischer Nationalfonds SNF École polytechnique fédérale de Lausanne EPFL Eidg. Forschungsanstalt WSL
+
+### Terms of Use and Safety Concept
+
+Collaboration on the Pfynwald research platform is highly welcome! For your safety and for the integrity of the forest site, we kindly ask the collaborators to take note of the Terms of Use and the Safety Concept.
