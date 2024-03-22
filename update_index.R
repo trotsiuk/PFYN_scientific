@@ -1,4 +1,4 @@
-rmarkdown::render("index.qmd")
+quarto::quarto_render("index.qmd")
 
 system('git add .')
 system('git commit -a -m "Index update"')
