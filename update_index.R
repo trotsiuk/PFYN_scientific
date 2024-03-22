@@ -1,4 +1,4 @@
-rmarkdown::render("index.Rmd")
+rmarkdown::render("index.qmd")
 
 system('git add .')
 system('git commit -a -m "Index update"')
