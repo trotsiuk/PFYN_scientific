@@ -25,7 +25,7 @@ editor: visual
 ```{r settings}
 #| eval: TRUE
 #| echo: FALSE
-#| output: TRUE
+#| output: FALSE
 #| warning: FALSE
 #| error: FALSE
 
@@ -52,7 +52,7 @@ time_year <- lubridate::year( time_last_day )
 ```{r libraries}
 #| eval: TRUE
 #| echo: FALSE
-#| output: TRUE
+#| output: FALSE
 #| warning: FALSE
 #| error: FALSE
 
@@ -108,7 +108,7 @@ pfyn_style <- list(
 ```{r data}
 #| eval: TRUE
 #| echo: FALSE
-#| output: TRUE
+#| output: FALSE
 #| warning: FALSE
 #| error: FALSE
 
