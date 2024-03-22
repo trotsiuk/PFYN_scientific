@@ -1,0 +1,3 @@
+### Automatic scientific report
+0 13 * * * cd /opt/lwfportal/R/R_processes/PFYN_scientific/ && /usr/bin/Rscript 'update_index.R'  >> "log/`date +\%Y-\%m`-update_index.log" 2>&1
+
