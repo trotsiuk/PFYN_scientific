@@ -199,7 +199,7 @@ text_at_max <- dplyr::group_by( text_vpd, VARNAME_NAME) %>% dplyr::filter( diff 
 
 ## Introcuction
 
-In the heart of the Pfynwald forest, our experiment stands at the intersection of climate change research and forest ecology, with a particular focus on impact of VPD on tree growth and mortality. In this report we present the latest scientific summary of main measured parameters in the experiment. Please visit [**Real-Time data** ](https://lwfvis.wsl.ch:3000/public-dashboards/31262a55a9f641a0b65224baebabfcc0) for more information and in-depth exploration of historical and recent data.
+In the heart of the Pfynwald forest, our experiment stands at the intersection of climate change research and forest ecology, with a particular focus on impact of VPD on tree growth and mortality. In this report we present the latest scientific summary of main measured parameters in the experiment. Please visit [**Real-Time data**](https://lwfvis.wsl.ch:3000/public-dashboards/31262a55a9f641a0b65224baebabfcc0) for more information and in-depth exploration of historical and recent data.
 
 ## Atmospheric precipitation and Solar radiation
 
@@ -260,7 +260,6 @@ data_vpd %>%
   labs( x = '', y = 'VPD max (kPa)')
 
 ```
-
 
 ```{r}
 #| eval: true

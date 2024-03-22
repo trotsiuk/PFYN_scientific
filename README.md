@@ -1,3 +1,1 @@
-# Intro
-
-An R markdown document to prepare the scientific output for the Pfynwald.
+The page is published at https://trotsiuk.github.io/PFYN_scientific/
